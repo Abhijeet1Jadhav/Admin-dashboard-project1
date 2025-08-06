@@ -1,36 +1,65 @@
-name: Deploy to S3
+name: Docker CI Pipeline Demo
 
 on:
   push:
     branches:
-      - main  # or 'master', depending on your repo
+      - main
+  workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  build-react:
+    name: Build React App
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install dependencies
-        run:  npm install
+      - name: Install Dependencies
+        run: npm ci
 
-      - name: Build React app
+      - name: Build React App
         run: npm run build
 
-      - name: Deploy to S3
-        uses: jakejarvis/s3-sync-action@master
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
         with:
-          args: --delete
-        env:
-          AWS_S3_BUCKET: ${{ secrets.S3_BUCKET_NAME }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          SOURCE_DIR: ./build
+          name: react-build
+          path: build
+
+  dockerize:
+    name: Dockerize React App
+    needs: build-react
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: react-build
+          path: build
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build -t react-dashboard:ci-demo .
+
+      - name: Save Docker Image as Artifact
+        run: |
+          docker save react-dashboard:ci-demo -o react-dashboard.tar
+
+      - name: Upload Docker Image Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: react-dashboard.tar
